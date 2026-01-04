@@ -1,4 +1,4 @@
-name: Buffalo WXR-2533DHP2 – Stable ImmortalWrt (NSS Final)
+name: Buffalo WXR-2533DHP2 – Final Stable (NSS + mbedTLS)
 
 on:
   workflow_dispatch:
@@ -15,6 +15,12 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+
+    - name: Cleanup Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+        sudo apt clean
 
     - name: Setup Build Environment
       run: |
@@ -34,32 +40,27 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    # ============================================================
-    # CONFIG – FINAL STABLE (Tối ưu cho Buffalo WXR-2533DHP2)
-    # ============================================================
     - name: Configure Firmware
       run: |
         cd openwrt
 
         cat << 'EOF' > .config
-        # ===== Target =====
+        # ===== Target System =====
         CONFIG_TARGET_ipq806x=y
         CONFIG_TARGET_ipq806x_generic=y
         CONFIG_TARGET_ipq806x_generic_DEVICE_buffalo_wxr-2533dhp2=y
 
-        # ===== Build both initramfs + sysupgrade =====
+        # ===== Build Image Types =====
         CONFIG_TARGET_ROOTFS_INITRAMFS=y
 
-        # ===== Base system =====
-        CONFIG_PACKAGE_dropbear=y
-        CONFIG_PACKAGE_ip-full=y
-        CONFIG_PACKAGE_curl=y
-        CONFIG_PACKAGE_htop=y
+        # ===== WPA - STABLE MBEDTLS (FIXED LỖI 1 ERROR) =====
+        CONFIG_PACKAGE_wpad-basic-mbedtls=y
+        # CONFIG_PACKAGE_wpad-openssl is not set
+        # CONFIG_PACKAGE_wpad-basic-openssl is not set
+        # CONFIG_PACKAGE_wpad-mini is not set
 
-        # ===== Ethernet (required on IPQ806x) =====
+        # ===== NSS Hardware Acceleration =====
         CONFIG_PACKAGE_kmod-qca-nss-dp=y
-
-        # ===== NSS Hardware Acceleration (FINAL) =====
         CONFIG_PACKAGE_kmod-qca-nss-drv=y
         CONFIG_PACKAGE_kmod-qca-nss-drv-netlink=y
         CONFIG_PACKAGE_kmod-qca-nss-drv-pppoe=y
@@ -69,48 +70,47 @@ jobs:
         CONFIG_PACKAGE_nss-firmware-ipq806x=y
         CONFIG_NSS_FIRMWARE_VERSION_11_4=y
 
-        # ===== Wi-Fi (STOCK – ổn định cho Buffalo) =====
+        # ===== Wi-Fi (Stock - Ổn định tuyệt đối) =====
         CONFIG_PACKAGE_kmod-ath10k=y
         CONFIG_PACKAGE_ath10k-firmware-qca9984=y
         CONFIG_PACKAGE_ath10k-board-qca9984=y
 
-        # ===== LuCI =====
+        # ===== LuCI & Performance =====
         CONFIG_PACKAGE_luci=y
-        CONFIG_PACKAGE_luci-ssl=y
+        CONFIG_PACKAGE_luci-ssl-mbedtls=y
         CONFIG_PACKAGE_luci-i18n-base-vi=y
-        CONFIG_PACKAGE_luci-app-opkg=y
-        CONFIG_PACKAGE_luci-app-sqm=y
         CONFIG_PACKAGE_luci-app-ttyd=y
         CONFIG_PACKAGE_luci-app-cpufreq=y
+        CONFIG_PACKAGE_irqbalance=y
+        CONFIG_PACKAGE_kmod-tcp-bbr=y
 
-        # ===== USB & Storage (Fixed) =====
+        # ===== USB 3.0 Setup =====
         CONFIG_PACKAGE_kmod-usb3=y
         CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y
         CONFIG_PACKAGE_kmod-usb-storage=y
         CONFIG_PACKAGE_kmod-fs-ntfs3=y
 
-        # ===== Optimization & Conflict Fix =====
+        # ===== Disable Conflicts =====
         # CONFIG_PACKAGE_kmod-nft-offload is not set
-        CONFIG_PACKAGE_kmod-tcp-bbr=y
-        CONFIG_PACKAGE_irqbalance=y
+        # CONFIG_PACKAGE_luci-app-sqm is not set
         EOF
 
         make defconfig
 
-    - name: Download sources
+    - name: Download Sources
       run: |
         cd openwrt
         make download -j$(nproc)
 
-    - name: Build firmware
+    - name: Build Firmware
       run: |
         cd openwrt
         make -j$(nproc) || make -j1 V=s
 
-    - name: Upload firmware
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Buffalo-WXR2533DHP2-Final
+        name: Buffalo-WXR2533DHP2-NSS-mbedTLS
         path: |
           openwrt/bin/targets/ipq806x/generic/*initramfs-uImage.itb
           openwrt/bin/targets/ipq806x/generic/*sysupgrade.bin
