@@ -1,4 +1,4 @@
-name: Buffalo-WXR2533-NSS-Final-Clean
+name: Buffalo-WXR2533-NSS-Master-Final
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ env:
 
 jobs:
   # ============================================================
-  # JOB 1: INITRAMFS (Dùng TFTP - Sạch 100%)
+  # JOB 1: INITRAMFS (Khóa sạch WolfSSL & OpenSSL)
   # ============================================================
   build_initramfs:
     name: Step1-Initramfs
@@ -39,10 +39,14 @@ jobs:
           CONFIG_TARGET_ipq806x_generic_DEVICE_buffalo_wxr-2533dhp2=y
           CONFIG_TARGET_ROOTFS_INITRAMFS=y
 
-          # === WIFI AUTH (mbedTLS) ===
+          # === KHÓA CHẶT WPAD & CRYPTO LOGIC ===
           CONFIG_PACKAGE_wpad-basic-mbedtls=y
+          # CONFIG_PACKAGE_wpad-basic-wolfssl is not set
+          # CONFIG_PACKAGE_wpad-openssl is not set
+          # CONFIG_PACKAGE_wpad is not set
+          # CONFIG_DEFAULT_uhttpd-mod-tls is not set
 
-          # === NSS & WIFI STOCK ===
+          # === NSS & WIFI ===
           CONFIG_PACKAGE_kmod-qca-nss-drv=y
           CONFIG_PACKAGE_kmod-qca-nss-ecm=y
           CONFIG_PACKAGE_nss-firmware-ipq806x=y
@@ -61,7 +65,7 @@ jobs:
           path: openwrt/bin/targets/ipq806x/generic/*initramfs-uImage.itb
 
   # ============================================================
-  # JOB 2: SYSUPGRADE (HTTP ONLY - DIỆT LỖI 1 ERROR)
+  # JOB 2: SYSUPGRADE (Logic Sanity 100%)
   # ============================================================
   build_sysupgrade:
     name: Step2-Sysupgrade
@@ -91,40 +95,44 @@ jobs:
           CONFIG_TARGET_ipq806x_generic=y
           CONFIG_TARGET_ipq806x_generic_DEVICE_buffalo_wxr-2533dhp2=y
 
-          # === WIFI AUTH (mbedTLS) ===
+          # === DIỆT TẬN GỐC WPAD & TLS CONFLICT ===
           CONFIG_PACKAGE_wpad-basic-mbedtls=y
+          # CONFIG_PACKAGE_wpad-basic-wolfssl is not set
+          # CONFIG_PACKAGE_wpad-openssl is not set
+          # CONFIG_PACKAGE_wpad is not set
+          # CONFIG_DEFAULT_uhttpd-mod-tls is not set
+          # CONFIG_PACKAGE_libustream-mbedtls20201210 is not set
 
-          # === LUCI HTTP ONLY (KHÔNG SSL ĐỂ TRÁNH LỖI ĐÓNG GÓI) ===
+          # === LUCI & UHTTPD ===
           CONFIG_PACKAGE_luci=y
           # CONFIG_PACKAGE_luci-ssl-mbedtls is not set
-
-          # === uhttpd KHÔNG TLS ===
           CONFIG_PACKAGE_uhttpd=y
           CONFIG_PACKAGE_uhttpd-mod-ubus=y
-          # CONFIG_PACKAGE_uhttpd-mod-tls is not set
 
-          # === NSS & WIFI STOCK ===
+          # === NSS, WIFI & UTILS ===
           CONFIG_PACKAGE_kmod-qca-nss-drv=y
           CONFIG_PACKAGE_kmod-qca-nss-ecm=y
           CONFIG_PACKAGE_nss-firmware-ipq806x=y
           CONFIG_NSS_FIRMWARE_VERSION_11_4=y
+          CONFIG_PACKAGE_nss-utils=y
           CONFIG_PACKAGE_kmod-ath10k=y
           CONFIG_PACKAGE_ath10k-firmware-qca9984=y
           CONFIG_PACKAGE_ath10k-board-qca9984=y
 
-          # === APPS & PERFORMANCE ===
+          # === APPS ===
           CONFIG_PACKAGE_luci-i18n-base-vi=y
           CONFIG_PACKAGE_luci-app-ttyd=y
           CONFIG_PACKAGE_luci-app-cpufreq=y
-          CONFIG_PACKAGE_irqbalance=y
           CONFIG_PACKAGE_kmod-usb3=y
-          CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y
           EOF
           make defconfig
-          echo "==== KIỂM TRA BIẾN THỂ LỖI ===="
-          grep "libustream" .config || echo "SẠCH: Không dính libustream"
+          echo "==== KIỂM TRA WPAD LOGIC ===="
+          grep -E "wpad|wolfssl|openssl" .config
       - name: Build
-        run: cd openwrt && make download -j$(nproc) && make -j$(nproc) || make -j1 V=s
+        run: |
+          cd openwrt
+          make download -j$(nproc)
+          make -j$(nproc) || make -j1 V=s
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
